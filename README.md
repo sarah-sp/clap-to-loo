@@ -1,36 +1,51 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Clap To Loo
 
-## Getting Started
+Live train departure times from Clapham Junction to London Waterloo (and back).
 
-First, run the development server:
+**[clap-to-loo.vercel.app](https://clap-to-loo.vercel.app)**
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
-```
+## Features
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+- Real-time departures from National Rail Darwin API
+- Toggle between Clapham Junction → Waterloo and Waterloo → Clapham Junction
+- Filter by platform
+- Shows minutes until departure (accounts for delays)
+- Auto-refreshes every 60 seconds (pauses when app is backgrounded)
+- TfL-inspired design
+- PWA support - add to iPhone home screen for app-like experience
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Tech Stack
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+- Next.js 14 (App Router)
+- Tailwind CSS
+- National Rail LDBWS API (via SOAP)
+- Deployed on Vercel
 
-## Learn More
+## Setup
 
-To learn more about Next.js, take a look at the following resources:
+1. Get a free API token from [National Rail Open Data](http://realtime.nationalrail.co.uk/OpenLDBWSRegistration/)
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+2. Clone and install:
+   ```bash
+   git clone https://github.com/sarah-sp/clap-to-loo.git
+   cd clap-to-loo
+   npm install
+   ```
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+3. Add your token to `.env.local`:
+   ```
+   DARWIN_TOKEN=your-token-here
+   ```
 
-## Deploy on Vercel
+4. Run:
+   ```bash
+   npm run dev
+   ```
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## Deploy
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Deploy to Vercel and add `DARWIN_TOKEN` as an environment variable.
+
+## Why "Clap To Loo"?
+
+Clap(ham Junction) To (Water)loo.
