@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 
 interface TrainService {
   std: string;
@@ -49,6 +49,14 @@ export default function DepartureBoard() {
   const [platformFilter, setPlatformFilter] = useState<string>("10");
   const [direction, setDirection] = useState<string>("to-waterloo");
   const [, setTick] = useState(0);
+  const [pullDistance, setPullDistance] = useState(0);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+
+  const containerRef = useRef<HTMLDivElement>(null);
+  const startY = useRef(0);
+  const isPulling = useRef(false);
+
+  const PULL_THRESHOLD = 80;
 
   const fetchDepartures = useCallback(async () => {
     try {
@@ -111,6 +119,69 @@ export default function DepartureBoard() {
     return () => clearInterval(interval);
   }, []);
 
+  const handleRefresh = useCallback(async () => {
+    setIsRefreshing(true);
+    await fetchDepartures();
+    setIsRefreshing(false);
+    setPullDistance(0);
+  }, [fetchDepartures]);
+
+  // Use refs for handlers to avoid stale closures
+  const pullDistanceRef = useRef(pullDistance);
+  pullDistanceRef.current = pullDistance;
+
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+
+    const handleTouchStart = (e: TouchEvent) => {
+      if (isRefreshing) return;
+
+      // Only start pull if page is at the top
+      const scrollTop = window.scrollY || document.documentElement.scrollTop;
+      if (scrollTop <= 0) {
+        startY.current = e.touches[0].clientY;
+        isPulling.current = true;
+      }
+    };
+
+    const handleTouchMove = (e: TouchEvent) => {
+      if (!isPulling.current || isRefreshing) return;
+
+      const currentY = e.touches[0].clientY;
+      const diff = currentY - startY.current;
+
+      if (diff > 0) {
+        // Prevent native scroll/refresh when pulling down
+        e.preventDefault();
+        // Resistance factor makes pull feel natural
+        const resistance = 0.5;
+        setPullDistance(Math.min(diff * resistance, PULL_THRESHOLD * 1.5));
+      }
+    };
+
+    const handleTouchEnd = () => {
+      if (!isPulling.current) return;
+      isPulling.current = false;
+
+      if (pullDistanceRef.current >= PULL_THRESHOLD && !isRefreshing) {
+        handleRefresh();
+      } else {
+        setPullDistance(0);
+      }
+    };
+
+    container.addEventListener("touchstart", handleTouchStart, { passive: true });
+    container.addEventListener("touchmove", handleTouchMove, { passive: false });
+    container.addEventListener("touchend", handleTouchEnd, { passive: true });
+
+    return () => {
+      container.removeEventListener("touchstart", handleTouchStart);
+      container.removeEventListener("touchmove", handleTouchMove);
+      container.removeEventListener("touchend", handleTouchEnd);
+    };
+  }, [isRefreshing, handleRefresh]);
+
   const getStatusStyle = (etd: string) => {
     const status = etd.toLowerCase();
     if (status === "cancelled") return "bg-[#E1251B] text-white px-1.5 sm:px-2 py-0.5 rounded text-xs sm:text-sm font-bold";
@@ -134,151 +205,193 @@ export default function DepartureBoard() {
     return platformFilter === "all" || service.platform === platformFilter;
   });
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center p-8 sm:p-12">
-        <div className="text-lg sm:text-xl text-white/80">Loading...</div>
-      </div>
-    );
-  }
+  const renderContent = () => {
+    if (loading) {
+      return (
+        <div className="flex items-center justify-center p-8 sm:p-12">
+          <div className="text-lg sm:text-xl text-white/80">Loading...</div>
+        </div>
+      );
+    }
 
-  if (error) {
-    return (
-      <div className="bg-[#E1251B] rounded-lg p-3 sm:p-4">
-        <h2 className="font-bold text-base sm:text-lg">Error</h2>
-        <p className="text-white/90 text-sm">{error}</p>
-        <button
-          onClick={fetchDepartures}
-          className="mt-3 px-4 py-2 bg-white text-[#E1251B] rounded font-bold hover:bg-white/90 text-sm"
-        >
-          Retry
-        </button>
-      </div>
-    );
-  }
-
-  return (
-    <div className="w-full max-w-md mx-auto">
-      {/* Direction Toggle - Segmented Control */}
-      <div className="bg-[#001840] p-1 rounded-full flex mb-3">
-        <button
-          onClick={() => {
-            setDirection("to-waterloo");
-            setPlatformFilter("10");
-          }}
-          className={`flex-1 py-2 px-3 rounded-full text-sm font-medium transition-all ${
-            direction === "to-waterloo"
-              ? "bg-white text-[#003688]"
-              : "text-white/70 active:bg-white/10"
-          }`}
-        >
-          To Waterloo
-        </button>
-        <button
-          onClick={() => {
-            setDirection("to-clapham");
-            setPlatformFilter("all");
-          }}
-          className={`flex-1 py-2 px-3 rounded-full text-sm font-medium transition-all ${
-            direction === "to-clapham"
-              ? "bg-white text-[#003688]"
-              : "text-white/70 active:bg-white/10"
-          }`}
-        >
-          To Clapham Jct
-        </button>
-      </div>
-
-      {/* Platform Pills */}
-      <div className="flex gap-2 mb-3 overflow-x-auto pb-1 -mx-1 px-1">
-        <button
-          onClick={() => setPlatformFilter("all")}
-          className={`px-3 py-1.5 rounded-full text-sm font-medium whitespace-nowrap transition-all ${
-            platformFilter === "all"
-              ? "bg-white text-[#003688]"
-              : "bg-[#001840] text-white/70 active:bg-[#002255]"
-          }`}
-        >
-          All
-        </button>
-        {platforms.map((platform) => (
+    if (error) {
+      return (
+        <div className="bg-[#E1251B] rounded-lg p-3 sm:p-4">
+          <h2 className="font-bold text-base sm:text-lg">Error</h2>
+          <p className="text-white/90 text-sm">{error}</p>
           <button
-            key={platform}
-            onClick={() => setPlatformFilter(platform!)}
+            onClick={fetchDepartures}
+            className="mt-3 px-4 py-2 bg-white text-[#E1251B] rounded font-bold hover:bg-white/90 text-sm"
+          >
+            Retry
+          </button>
+        </div>
+      );
+    }
+
+    return (
+      <>
+        {/* Direction Toggle - Segmented Control */}
+        <div className="bg-[#001840] p-1 rounded-full flex mb-3">
+          <button
+            onClick={() => {
+              setDirection("to-waterloo");
+              setPlatformFilter("10");
+            }}
+            className={`flex-1 py-2 px-3 rounded-full text-sm font-medium transition-all ${
+              direction === "to-waterloo"
+                ? "bg-white text-[#003688]"
+                : "text-white/70 active:bg-white/10"
+            }`}
+          >
+            To Waterloo
+          </button>
+          <button
+            onClick={() => {
+              setDirection("to-clapham");
+              setPlatformFilter("all");
+            }}
+            className={`flex-1 py-2 px-3 rounded-full text-sm font-medium transition-all ${
+              direction === "to-clapham"
+                ? "bg-white text-[#003688]"
+                : "text-white/70 active:bg-white/10"
+            }`}
+          >
+            To Clapham Jct
+          </button>
+        </div>
+
+        {/* Platform Pills */}
+        <div className="flex gap-2 mb-3 overflow-x-auto pb-1 -mx-1 px-1">
+          <button
+            onClick={() => setPlatformFilter("all")}
             className={`px-3 py-1.5 rounded-full text-sm font-medium whitespace-nowrap transition-all ${
-              platformFilter === platform
+              platformFilter === "all"
                 ? "bg-white text-[#003688]"
                 : "bg-[#001840] text-white/70 active:bg-[#002255]"
             }`}
           >
-            Plat {platform}
+            All
           </button>
-        ))}
-      </div>
-
-      {/* Departure List */}
-      <div className="bg-[#001840] rounded-2xl overflow-hidden">
-        {/* Column Headers */}
-        <div className="flex items-center gap-3 px-3 py-2 bg-[#002255] text-white/60 text-[10px] uppercase tracking-wide font-medium">
-          <div className="w-14 shrink-0">Due</div>
-          <div className="flex-1">Destination</div>
-          <div className="w-7 text-center shrink-0">Plat</div>
-          <div className="w-16 text-right shrink-0">Status</div>
+          {platforms.map((platform) => (
+            <button
+              key={platform}
+              onClick={() => setPlatformFilter(platform!)}
+              className={`px-3 py-1.5 rounded-full text-sm font-medium whitespace-nowrap transition-all ${
+                platformFilter === platform
+                  ? "bg-white text-[#003688]"
+                  : "bg-[#001840] text-white/70 active:bg-[#002255]"
+              }`}
+            >
+              Plat {platform}
+            </button>
+          ))}
         </div>
-        {filteredServices && filteredServices.length > 0 ? (
-          <div className="divide-y divide-white/10">
-            {filteredServices.map((service, index) => {
-              const mins = getMinutesUntil(service.std, service.etd, data?.generatedAt || "");
-              return (
-                <div
-                  key={`${service.std}-${index}`}
-                  className="flex items-center gap-3 px-3 py-2.5 active:bg-white/5"
-                >
-                  {/* Time */}
-                  <div className="w-14 shrink-0">
-                    <div className={`font-mono text-xl font-bold ${mins !== null && mins < 0 ? "text-white/40" : "text-white"}`}>
-                      {mins !== null ? (mins < 0 ? `${mins}` : mins === 0 ? "Due" : `${mins}`) : service.std}
-                    </div>
-                    <div className="text-white/40 text-[10px]">{mins !== null && mins !== 0 ? "min" : ""}</div>
-                  </div>
 
-                  {/* Destination & time */}
-                  <div className="flex-1 min-w-0">
-                    <div className="font-medium text-white text-sm truncate">
-                      {shortenDestination(service.destination?.[0]?.locationName || "Unknown")}
-                    </div>
-                    <div className="text-white/40 text-[10px]">{service.std}</div>
-                  </div>
-
-                  {/* Platform */}
-                  {service.platform ? (
-                    <span className="bg-white text-[#003688] font-bold w-7 h-7 leading-7 rounded text-center text-sm shrink-0">
-                      {service.platform}
-                    </span>
-                  ) : (
-                    <span className="w-7 text-center text-white/30 shrink-0">-</span>
-                  )}
-
-                  {/* Status */}
-                  <div className="w-16 text-right shrink-0">
-                    <span className={getStatusStyle(service.etd)}>
-                      {service.etd}
-                    </span>
-                  </div>
-                </div>
-              );
-            })}
+        {/* Departure List */}
+        <div className="bg-[#001840] rounded-2xl overflow-hidden">
+          {/* Column Headers */}
+          <div className="flex items-center gap-3 px-3 py-2 bg-[#002255] text-white/60 text-[10px] uppercase tracking-wide font-medium">
+            <div className="w-14 shrink-0">Due</div>
+            <div className="flex-1">Destination</div>
+            <div className="w-7 text-center shrink-0">Plat</div>
+            <div className="w-16 text-right shrink-0">Status</div>
           </div>
-        ) : (
-          <div className="px-4 py-8 text-center text-white/50">
-            No departures found
-          </div>
-        )}
+          {filteredServices && filteredServices.length > 0 ? (
+            <div className="divide-y divide-white/10">
+              {filteredServices.map((service, index) => {
+                const mins = getMinutesUntil(service.std, service.etd, data?.generatedAt || "");
+                return (
+                  <div
+                    key={`${service.std}-${index}`}
+                    className="flex items-center gap-3 px-3 py-2.5 active:bg-white/5"
+                  >
+                    {/* Time */}
+                    <div className="w-14 shrink-0">
+                      <div className={`font-mono text-xl font-bold ${mins !== null && mins < 0 ? "text-white/40" : "text-white"}`}>
+                        {mins !== null ? (mins < 0 ? `${mins}` : mins === 0 ? "Due" : `${mins}`) : service.std}
+                      </div>
+                      <div className="text-white/40 text-[10px]">{mins !== null && mins !== 0 ? "min" : ""}</div>
+                    </div>
+
+                    {/* Destination & time */}
+                    <div className="flex-1 min-w-0">
+                      <div className="font-medium text-white text-sm truncate">
+                        {shortenDestination(service.destination?.[0]?.locationName || "Unknown")}
+                      </div>
+                      <div className="text-white/40 text-[10px]">{service.std}</div>
+                    </div>
+
+                    {/* Platform */}
+                    {service.platform ? (
+                      <span className="bg-white text-[#003688] font-bold w-7 h-7 leading-7 rounded text-center text-sm shrink-0">
+                        {service.platform}
+                      </span>
+                    ) : (
+                      <span className="w-7 text-center text-white/30 shrink-0">-</span>
+                    )}
+
+                    {/* Status */}
+                    <div className="w-16 text-right shrink-0">
+                      <span className={getStatusStyle(service.etd)}>
+                        {service.etd}
+                      </span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="px-4 py-8 text-center text-white/50">
+              No departures found
+            </div>
+          )}
+        </div>
+
+        <div className="flex justify-between items-center mt-3 text-[10px] sm:text-xs text-white/40">
+          <span>Pull to refresh</span>
+          <span>{data?.generatedAt ? new Date(data.generatedAt).toLocaleTimeString() : ""}</span>
+        </div>
+      </>
+    );
+  };
+
+  return (
+    <div
+      ref={containerRef}
+      className="w-full max-w-md mx-auto relative overflow-visible"
+    >
+      {/* Pull to Refresh Indicator */}
+      <div
+        className="fixed left-0 right-0 flex justify-center items-center z-20"
+        style={{
+          top: 80,
+          height: 40,
+          opacity: pullDistance > 0 || isRefreshing ? 1 : 0,
+          transition: "opacity 0.15s ease-out",
+        }}
+      >
+        <div
+          className={`w-6 h-6 border-2 border-white/60 border-t-transparent rounded-full ${
+            isRefreshing ? "animate-spin" : ""
+          }`}
+          style={{
+            transform: isRefreshing
+              ? "rotate(0deg)"
+              : `rotate(${(pullDistance / PULL_THRESHOLD) * 360}deg)`,
+            opacity: isRefreshing ? 1 : Math.min(pullDistance / PULL_THRESHOLD, 1),
+          }}
+        />
       </div>
 
-      <div className="flex justify-between items-center mt-3 text-[10px] sm:text-xs text-white/40">
-        <span>Auto-refreshes every 60s</span>
-        <span>{data?.generatedAt ? new Date(data.generatedAt).toLocaleTimeString() : ""}</span>
+      {/* Main Content */}
+      <div
+        style={{
+          transform: `translateY(${pullDistance}px)`,
+          transition: "transform 0.15s ease-out",
+        }}
+      >
+        {renderContent()}
       </div>
     </div>
   );

@@ -88,7 +88,7 @@ export async function GET(request: NextRequest) {
           "SOAPAction": "http://thalesgroup.com/RTTI/2012-01-13/ldb/GetDepartureBoard",
         },
         body: buildSoapRequest(token, from, to),
-        next: { revalidate: 30 },
+        cache: "no-store",
       }
     );
 

@@ -13,7 +13,7 @@ function Roundel() {
 
 export default function Home() {
   return (
-    <main className="min-h-screen bg-[#003688] text-white pb-12">
+    <main className="min-h-screen bg-[#003688] text-white">
       <header className="bg-[#003688] border-b-4 border-white/20 px-3 sm:px-4 py-3 sm:py-4 sticky top-0 z-10">
         <div className="max-w-md mx-auto flex items-center gap-3">
           <Roundel />
@@ -28,10 +28,6 @@ export default function Home() {
       <div className="max-w-4xl mx-auto p-3 sm:p-4">
         <DepartureBoard />
       </div>
-
-      <footer className="fixed bottom-0 left-0 right-0 bg-[#002255] text-white/60 text-[10px] sm:text-xs text-center py-1.5 sm:py-2 safe-bottom">
-        Not affiliated with TfL or National Rail
-      </footer>
     </main>
   );
 }
